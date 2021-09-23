@@ -1,0 +1,10 @@
+# Binaries for programs and plugins
+main
+wireworld
+*.exe
+*.exe~
+*.so
+*.dylib
+*.dll
+*.pdb
+out.c
