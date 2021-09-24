@@ -3,6 +3,12 @@ module wireworld
 import gg
 import gx
 
+const (
+	connection_char = "#"
+	electron_head_char = "@"
+	electorn_tail_char = "-"
+	empty_char = "."
+)
 
 fn swap<T>(mut a &T, mut b &T)
 {
@@ -63,9 +69,8 @@ pub fn create_world(options WireworldOptions) &Wireworld
 	}
 }
 
-
 [direct_array_access]
-pub fn (this Wireworld) draw(gg &gg.Context, res_scale int)
+pub fn (this Wireworld) draw(gg &gg.Context, res_scale int, should_draw_grid bool)
 {
 	pixels := this.curr_map
 
@@ -79,15 +84,28 @@ pub fn (this Wireworld) draw(gg &gg.Context, res_scale int)
 			if connection == 1
 			{
 				c := match p {
-					0b11 { gx.blue }
-					0b101 { gx.red }
-					else { gx.yellow }
+					0b11 { this.electron_head_colour }
+					0b101 { this.electron_tail_colour }
+					else { this.connection_colour }
 				}
 				gg.draw_square(x * res_scale, y * res_scale, res_scale, c)
 			}
 
 		}
 	}
+
+	if should_draw_grid
+	{
+		for y in 0..this.y_resolution
+		{
+			gg.draw_line(0, y * res_scale, this.x_resolution * res_scale, y * res_scale, gx.gray)
+		}
+		for x in 0..this.x_resolution
+		{
+			gg.draw_line(x * res_scale, 0, x * res_scale, this.y_resolution * res_scale, gx.gray)
+		}
+	}
+
 }
 
 [direct_array_access]
@@ -153,4 +171,82 @@ pub fn (mut this Wireworld) tick()
 	}
 
 	swap<[]u8>(mut this.curr_map, mut this.next_map)
+}
+
+pub fn (mut this Wireworld) toggle_cell(x int, y int)
+{
+	p := this.ctoi(x, y, 0, 0)
+	this.curr_map[p] = this.curr_map[p] & 1 ^ 1
+	this.next_map[p] = this.curr_map[p]
+}
+
+pub fn (mut this Wireworld) add_electron(x int, y int)
+{
+	p := this.ctoi(x, y, 0, 0)
+	a := this.curr_map[p]
+	if a & 1 == 1
+	{
+		this.curr_map[p] = match true {
+			a == 1 { 0b11 }
+			a & 0b10 != 0 { 0b101 }
+			else { 1 }
+		}
+	}
+}
+
+pub fn (mut this Wireworld) clear()
+{
+	this.curr_map = this.curr_map.map(fn (a u8) u8 { return 0 })
+	this.next_map = this.curr_map.clone()
+}
+
+pub fn (this Wireworld) serialise_map() string
+{
+	mut out := ""
+
+	for y in 0..this.y_resolution
+	{
+		for x in 0..this.x_resolution
+		{
+			out += match this.curr_map[this.ctoi(x, y, 0, 0)] {
+				1 { connection_char }
+				0b11 { electron_head_char }
+				0b101 { electorn_tail_char }
+				else { empty_char }
+			}
+		}
+		out += "\n"
+	}
+	dump(out)
+	return out[0..out.len-1]
+}
+
+pub fn deserialise_map(m string) (int, int, []u8)
+{
+	mut out := []u8{}
+
+	mut n := 0
+	mut i := 0
+	for v in m
+	{
+		c := v.ascii_str()
+
+		match c {
+			connection_char, electron_head_char, electorn_tail_char, empty_char {
+				out << match c {
+					connection_char { 1 }
+					electron_head_char { 0b11 }
+					electorn_tail_char { 0b101 }
+					empty_char { 0 }
+					else { panic("wtf") }
+				}
+				i++
+			}
+			"\n" { n++ }
+			else {}
+		}
+
+	}
+
+	return i / (n + 1), n + 1, out
 }
